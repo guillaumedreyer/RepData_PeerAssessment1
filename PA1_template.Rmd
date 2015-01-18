@@ -1,25 +1,198 @@
----
-title: "Reproducible Research: Peer Assessment 1"
-output: 
-  html_document:
-    keep_md: true
----
+# Loading and preprocessing the data.  
 
 
-## Loading and preprocessing the data
+###**1. Load the data.**
+```{r}
+library(data.table)
+activity <- read.csv('activity.csv')
+```
 
 
-
-## What is mean total number of steps taken per day?
-
-
-
-## What is the average daily activity pattern?
-
-
-
-## Imputing missing values
+###**2. Process the data.**
+```{r}
+activity$date <- as.Date(as.character(activity$date))
+head(activity)
+```
 
 
 
-## Are there differences in activity patterns between weekdays and weekends?
+# What is the mean total number of steps taken per day?
+```{r Data_per_day}
+daily_activity <- split(activity, activity$date)
+days <- length(daily_activity)
+daily_steps <- NULL
+daily_mean <- NULL
+daily_median <- NULL
+for (i in 1:days){
+        daily_steps <- c(daily_steps, sum(daily_activity[[i]]$steps,na.rm = TRUE))
+}
+
+daily <- data.frame('date'= unique(activity$date),
+                    'daily_steps'=  daily_steps)
+head(daily)
+```
+
+
+###**1. Histogram of the total number steps per day.**
+
+```{r}
+hist(daily$daily_steps)
+```
+
+
+###**2. Mean and median of the total number of steps taken each day.**
+
+```{r}
+mean_total_steps <- mean(daily$daily_steps)
+median_total_steps <- median(daily$daily_steps)
+```
+
+**Mean** is `r mean_total_steps` and **median** is `r median_total_steps`.
+
+# What is the average daily activity pattern?
+
+###**1. Panel plot representing (y-axis) the average number of steps taken, averaged across all days, in function of the 5-minute interval (x-axis).**
+
+```{r}
+x <- daily_activity[[1]]$interval
+
+y <- NULL
+number_of_intervals <- nrow(daily_activity[[1]])
+interval_activity <- split(activity, activity$interval)
+for (i in 1:number_of_intervals){
+        y <- c(y, mean(interval_activity[[i]]$steps, na.rm = TRUE))
+}
+plot(x,y, type='l', xlab = 'interval')
+title('Average Daily Activity')
+interval_max <- x[which.max(y)]
+```
+
+The **5-minute interval, on average across all the days in the dataset, that contains the maximum number of steps** is `r interval_max`.
+
+
+
+
+# Imputing missing values.
+
+###**1. Total number of missing values in the dataset.**
+
+```{r}
+length(activity$steps[is.na(activity$steps)])
+```
+
+
+###**2. Filling in missing values.** 
+
+We decide to replace each missing value in a certain interval with the **mean of the values in this interval**.
+
+```{r}
+filling_values <- y
+
+filled_in_interval_activity <- interval_activity
+for (i in 1:number_of_intervals){
+        index <- which(is.na(interval_activity[[i]]$steps))
+        filled_in_interval_activity[[i]]$steps[index] <- rep(filling_values[i], length(index))
+}
+```
+
+###**3. Here is the filled in dataset.**
+
+```{r}
+filled_in_activity <- rbindlist(filled_in_interval_activity)
+index <- with(filled_in_activity, order(date, interval))
+filled_in_activity <- as.data.frame(filled_in_activity[index, ])
+head(filled_in_activity)
+```
+
+
+###**4. Histogram, mean and median of the total of the total number of steps per day for the filled in dataset.**
+
+```{r}
+filled_in_daily_activity <- split(filled_in_activity, filled_in_activity$date)
+daily_steps <- NULL
+daily_mean <- NULL
+daily_median <- NULL
+for (i in 1:days){
+        daily_steps <- c(daily_steps, 
+                                   sum(filled_in_daily_activity[[i]]$steps))
+}
+
+filled_in_daily <- data.frame('date'= unique(activity$date),
+                              'daily_steps' = daily_steps)
+
+hist(filled_in_daily$daily_steps)
+filled_in_mean_total_steps <- mean(filled_in_daily$daily_steps)
+filled_in_median_total_steps <- median(filled_in_daily$daily_steps)
+diff_mean <- abs(mean_total_steps-filled_in_mean_total_steps)
+diff_median <- abs(median_total_steps-filled_in_median_total_steps)
+```
+
+**Mean** is `r filled_in_mean_total_steps` and **median** is `r filled_in_median_total_steps`.
+
+###**Observations:** 
+
+Regarding the **mean** and **median** values:  
+
+The **initial and second mean values** are respectively `r mean_total_steps` and `r filled_in_mean_total_steps`, and thus differ from `r diff_mean`, which is significant.  
+
+On the hand, the **initial and second median values** are respectively `r median_total_steps` and `r filled_in_median_total_steps`, and thus don't differ much (`r diff_median`).    
+
+Besides, one can see that filling in the missing values does affect 
+the initial histogram. Indeed, the obtained frequency of the modified dataset is clearly better **normally** distributed (bell curve). Also, note that the **mean and median values** (`r filled_in_mean_total_steps` and `r filled_in_median_total_steps` resp.) for the modified dataset don't differ much unlike in the first place (`r mean_total_steps` and `r median_total_steps` resp.), as it is the case for **normally** distributed frequencies. 
+
+
+# Are there differences in activity patterns between weekdays and weekends?
+
+```{r}
+new_activity <- filled_in_activity
+````
+
+
+###**1. Creating a new factor variable in the dataset 'new_activity'.**
+
+```{r}
+day_type <- function(dates){
+        weekday <- c('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday')
+        weekend <- c('Saturday', 'Sunday')
+        days <- weekdays(dates)
+        results <- NULL
+        for (day in days){
+                check <- day == weekday
+                if (any(check)){
+                        results <- c(results,'weekday')
+                }else{
+                        results <- c(results,'weekend') 
+                }
+        }
+        factor(results, levels = c('weekday', 'weekend'))
+}
+
+new_activity$'day_type' <- day_type(new_activity$date)
+head(new_activity)
+```
+
+
+
+###**2. Panel plot representing (y-axis) the average number of steps taken (averaged across all weekday days or weekend days) in function of the 5-minute interval (x-axis).**
+
+```{r}
+x <- unique(new_activity$interval)
+
+y_weekday <- NULL
+y_weekend <- NULL
+day_type_split <- split(new_activity, new_activity$day_type)
+new_activity_weekday <- day_type_split$'weekday'
+new_activity_weekend <- day_type_split$'weekend'
+interval_new_activity_weekday <- split(new_activity_weekday, new_activity_weekday$interval)
+interval_new_activity_weekend <- split(new_activity_weekend, new_activity_weekend$interval)
+for (i in 1:number_of_intervals){
+        y_weekday <- c(y_weekday, mean(interval_new_activity_weekday[[i]]$steps, na.rm = TRUE))
+        y_weekend <- c(y_weekend, mean(interval_new_activity_weekend[[i]]$steps, na.rm = TRUE))
+}
+
+par(mfrow=c(2,1))
+plot(x, y_weekday, type='l', xlab = 'interval')
+title('Weekday')
+plot(x, y_weekend, type='l', xlab = 'interval')
+title('Weekend')
+```
